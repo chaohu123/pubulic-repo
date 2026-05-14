@@ -19,6 +19,8 @@
 
     <properties>
         <java.version>17</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     </properties>
 
     <dependencies>
@@ -50,6 +52,10 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <!-- 显式版本：避免仅依赖父 POM 时部分环境下无法解析 spring-boot 前缀 -->
                 <version>3.2.5</version>
+                <configuration>
+                    <!-- Windows 控制台 UTF-8，减轻中文日志乱码 -->
+                    <jvmArguments>-Dfile.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8</jvmArguments>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>

@@ -110,7 +110,8 @@ public class EnrollmentService {
         result.setMessage(String.format(
                 "解析合法 %d 条，空行 %d，非法 %d，合并重复 %d，输出 %d 条。",
                 parsed.size(), parseOutcome.emptyLineCount(), parseOutcome.invalidLineCount(), duplicateMerged, deduped.size()));
-        log.info("处理耗时：{}ms | 合法行={} 输出行={} 合并重复={}", elapsedMs, parsed.size(), deduped.size(), duplicateMerged);
+        // 日志使用 ASCII/英文，避免 Windows 默认代码页下控制台中文乱码（业务文案仍以 API 返回中文为准）
+        log.info("process elapsed={}ms validLines={} outputLines={} mergedDuplicates={}", elapsedMs, parsed.size(), deduped.size(), duplicateMerged);
         return result;
     }
 
@@ -134,16 +135,15 @@ public class EnrollmentService {
                 throw new BusinessException(400, "Excel 中无工作表");
             }
             Sheet sheet = wb.getSheetAt(0);
-            boolean firstDataRow = true;
-            for (Row row : sheet) {
+            int last = sheet.getLastRowNum();
+            for (int r = 0; r <= last; r++) {
+                Row row = sheet.getRow(r);
                 if (row == null) {
                     continue;
                 }
-                if (firstDataRow && isLikelyHeaderRow(row)) {
-                    firstDataRow = false;
+                if (r == 0 && isLikelyHeaderRow(row)) {
                     continue;
                 }
-                firstDataRow = false;
                 String sid = cellToPlain(row.getCell(0));
                 String cid = cellToPlain(row.getCell(1));
                 String cname = cellToPlain(row.getCell(2));
@@ -164,7 +164,7 @@ public class EnrollmentService {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Excel 解析失败", e);
+            log.error("Excel parse failed", e);
             throw new BusinessException(500, "Excel 解析失败：" + e.getMessage());
         }
         CsvProcessRequest req = new CsvProcessRequest();
@@ -172,7 +172,7 @@ public class EnrollmentService {
         ProcessResult result = processCsv(req);
         long totalMs = (System.nanoTime() - start) / 1_000_000L;
         result.setMessage("Excel 导入 | " + result.getMessage());
-        log.info("Excel 导入总耗时约 {}ms（含 CSV 管道）", totalMs);
+        log.info("Excel import total elapsed={}ms (includes CSV pipeline)", totalMs);
         return result;
     }
 
@@ -205,7 +205,7 @@ public class EnrollmentService {
             out.setMatched(true);
             out.setMessage(null);
             out.setElapsedMs((System.nanoTime() - start) / 1_000_000L);
-            log.info("统一检索耗时：{}ms（无条件，全量 {} 条）", out.getElapsedMs(), source.size());
+            log.info("unifiedSearch elapsed={}ms noCriteria returnAll count={}", out.getElapsedMs(), source.size());
             return out;
         }
 
@@ -227,7 +227,7 @@ public class EnrollmentService {
             out.setMatched(true);
             out.setRecords(matched);
         }
-        log.info("统一检索耗时：{}ms | 命中 {} 条", elapsedMs, matched.size());
+        log.info("unifiedSearch elapsed={}ms matched={}", elapsedMs, matched.size());
         return out;
     }
 
@@ -244,7 +244,7 @@ public class EnrollmentService {
         source.sort(comparator.thenComparing(EnrollRecord::getStudentId, Comparator.nullsLast(String::compareTo))
                 .thenComparing(EnrollRecord::getCourseId, Comparator.nullsLast(String::compareTo)));
         long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
-        log.info("排序耗时：{}ms | 条数={} 字段={} 升序={}", elapsedMs, source.size(), request.getSortField(), request.isAscending());
+        log.info("sort elapsed={}ms count={} field={} ascending={}", elapsedMs, source.size(), request.getSortField(), request.isAscending());
         return source;
     }
 
@@ -539,6 +539,75 @@ public class EnrollmentService {
         boolean needQuote = v.contains(",") || v.contains("\"") || v.contains("\n") || v.contains("\r");
         String s = v.replace("\"", "\"\"");
         return needQuote ? "\"" + s + "\"" : s;
+    }
+
+    /**
+     * 判断首行是否为表头（避免把数据行当表头误删）。
+     */
+    private boolean isLikelyHeaderRow(Row row) {
+        String a = cellToPlain(row.getCell(0));
+        String b = cellToPlain(row.getCell(1));
+        String c = cellToPlain(row.getCell(2));
+        if (a.contains("学生") && (a.contains("ID") || a.contains("学号"))) {
+            return true;
+        }
+        if (b.contains("课程") && b.toUpperCase(Locale.ROOT).contains("ID")) {
+            return true;
+        }
+        if (c.contains("课程") && c.contains("名称")) {
+            return true;
+        }
+        return "student_id".equalsIgnoreCase(a) || "course_id".equalsIgnoreCase(b);
+    }
+
+    /**
+     * 单元格转字符串（兼容数字、公式、日期）。
+     */
+    private static String cellToPlain(Cell cell) {
+        if (cell == null) {
+            return "";
+        }
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue().trim();
+            case NUMERIC -> {
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    yield cell.getLocalDateTimeCellValue().toString();
+                }
+                double v = cell.getNumericCellValue();
+                if (v == Math.rint(v) && v >= -1e12 && v <= 1e12) {
+                    yield String.format(Locale.ROOT, "%.0f", v);
+                }
+                yield String.valueOf(v);
+            }
+            case BOOLEAN -> Boolean.toString(cell.getBooleanCellValue());
+            case FORMULA -> {
+                try {
+                    yield cell.getStringCellValue().trim();
+                } catch (Exception e) {
+                    try {
+                        double v = cell.getNumericCellValue();
+                        if (v == Math.rint(v)) {
+                            yield String.format(Locale.ROOT, "%.0f", v);
+                        }
+                        yield String.valueOf(v);
+                    } catch (Exception e2) {
+                        yield "";
+                    }
+                }
+            }
+            case BLANK -> "";
+            default -> "";
+        };
+    }
+
+    /**
+     * 写入合成 CSV 前：去掉换行并将英文逗号替换为全角逗号，避免拆列错乱。
+     */
+    private static String sanitizeCellForCsvLine(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replace('\r', ' ').replace('\n', ' ').replace(',', '，');
     }
 
     /**

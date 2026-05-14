@@ -1,18 +1,22 @@
 package com.campus.enrollment.service;
 
 import com.campus.enrollment.dto.CsvProcessRequest;
-import com.campus.enrollment.dto.MultiSearchRequest;
 import com.campus.enrollment.dto.ProcessResult;
-import com.campus.enrollment.dto.SearchRequest;
 import com.campus.enrollment.dto.SearchResult;
 import com.campus.enrollment.dto.SortField;
 import com.campus.enrollment.dto.SortRequest;
+import com.campus.enrollment.dto.UnifiedSearchRequest;
 import com.campus.enrollment.entity.EnrollRecord;
 import com.campus.enrollment.exception.BusinessException;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.mock.web.MockMultipartFile;
 
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -107,49 +111,47 @@ class EnrollmentServiceTest {
     }
 
     /**
-     * 单关键词检索：无匹配时返回固定提示文案。
+     * 统一检索-快捷维度：无匹配时返回固定提示文案。
      */
     @Test
     void searchNoMatch() {
-        SearchRequest req = new SearchRequest();
+        UnifiedSearchRequest req = new UnifiedSearchRequest();
         req.setRecords(List.of(new EnrollRecord("S000001", "C000001", "X", EnrollmentService.TYPE_MAJOR)));
-        req.setSearchType(EnrollmentService.SEARCH_COURSE_NAME);
-        req.setKeyword("不存在");
-        SearchResult out = service.search(req);
+        req.setQuickDimension(EnrollmentService.SEARCH_COURSE_NAME);
+        req.setQuickKeyword("不存在");
+        SearchResult out = service.searchUnified(req);
         log.info("【检索测试】matched={} message={}", out.isMatched(), out.getMessage());
         assertFalse(out.isMatched());
         assertEquals(EnrollmentService.NO_MATCH_MESSAGE, out.getMessage());
     }
 
     /**
-     * 单关键词检索：关键词为空时返回全量。
+     * 统一检索：无任何条件时返回全量。
      */
     @Test
     void searchEmptyKeywordReturnsAll() {
-        SearchRequest req = new SearchRequest();
+        UnifiedSearchRequest req = new UnifiedSearchRequest();
         req.setRecords(List.of(new EnrollRecord("S000001", "C000001", "X", EnrollmentService.TYPE_MAJOR)));
-        req.setSearchType(EnrollmentService.SEARCH_COURSE_NAME);
-        req.setKeyword("   ");
-        SearchResult out = service.search(req);
-        log.info("【检索空关键词】条数={} 耗时={}ms", out.getRecords().size(), out.getElapsedMs());
+        SearchResult out = service.searchUnified(req);
+        log.info("【检索无条件】条数={} 耗时={}ms", out.getRecords().size(), out.getElapsedMs());
         assertTrue(out.isMatched());
         assertEquals(1, out.getRecords().size());
     }
 
     /**
-     * 非法 searchType：应抛出业务异常。
+     * 非法快捷维度：应抛出业务异常。
      */
     @Test
     void searchInvalidType_throws() {
-        SearchRequest req = new SearchRequest();
+        UnifiedSearchRequest req = new UnifiedSearchRequest();
         req.setRecords(List.of(new EnrollRecord("S000001", "C000001", "X", EnrollmentService.TYPE_MAJOR)));
-        req.setSearchType("BAD_TYPE");
-        req.setKeyword("a");
-        assertThrows(BusinessException.class, () -> service.search(req));
+        req.setQuickDimension("BAD_TYPE");
+        req.setQuickKeyword("a");
+        assertThrows(BusinessException.class, () -> service.searchUnified(req));
     }
 
     /**
-     * 多条件组合检索：学生 ID 片段 + 课程类型同时满足。
+     * 统一检索：学生 ID 片段 + 课程类型同时满足（多列 AND）。
      */
     @Test
     void multiSearch_andLogic() {
@@ -158,15 +160,67 @@ class EnrollmentServiceTest {
                 new EnrollRecord("S000002", "C000002", "B", EnrollmentService.TYPE_PUBLIC),
                 new EnrollRecord("S000001", "C000003", "C", EnrollmentService.TYPE_PUBLIC)
         );
-        MultiSearchRequest req = new MultiSearchRequest();
+        UnifiedSearchRequest req = new UnifiedSearchRequest();
         req.setRecords(list);
         req.setStudentId("S000001");
         req.setCourseType(EnrollmentService.TYPE_PUBLIC);
-        SearchResult out = service.searchMulti(req);
+        SearchResult out = service.searchUnified(req);
         log.info("【组合检索】命中条数={} 耗时={}ms", out.getRecords().size(), out.getElapsedMs());
         assertTrue(out.isMatched());
         assertEquals(1, out.getRecords().size());
         assertEquals("C000003", out.getRecords().get(0).getCourseId());
+    }
+
+    /**
+     * 统一检索：多列 AND + 快捷维度关键词同时生效。
+     */
+    @Test
+    void unifiedSearch_columnsAndQuick_and() {
+        List<EnrollRecord> list = List.of(
+                new EnrollRecord("S000001", "C000001", "高等数学", EnrollmentService.TYPE_PUBLIC),
+                new EnrollRecord("S000001", "C000002", "Java程序设计", EnrollmentService.TYPE_MAJOR)
+        );
+        UnifiedSearchRequest req = new UnifiedSearchRequest();
+        req.setRecords(list);
+        req.setStudentId("S000001");
+        req.setQuickDimension(EnrollmentService.SEARCH_COURSE_NAME);
+        req.setQuickKeyword("Java");
+        SearchResult out = service.searchUnified(req);
+        assertTrue(out.isMatched());
+        assertEquals(1, out.getRecords().size());
+        assertEquals("C000002", out.getRecords().get(0).getCourseId());
+    }
+
+    /**
+     * Excel 导入：含表头行时应正确解析数据行。
+     */
+    @Test
+    void processExcel_withHeader_ok() throws Exception {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sh = wb.createSheet("选课");
+            Row h = sh.createRow(0);
+            h.createCell(0).setCellValue("学生ID");
+            h.createCell(1).setCellValue("课程ID");
+            h.createCell(2).setCellValue("课程名称");
+            h.createCell(3).setCellValue("课程类型");
+            Row d = sh.createRow(1);
+            d.createCell(0).setCellValue("S000099");
+            d.createCell(1).setCellValue("C000099");
+            d.createCell(2).setCellValue("软件工程");
+            d.createCell(3).setCellValue("专业课");
+            wb.write(bos);
+        }
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "test-import.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                bos.toByteArray());
+        ProcessResult r = service.processExcel(file);
+        log.info("【Excel导入】输出={}", r.getOutputCount());
+        assertEquals(1, r.getOutputCount());
+        assertEquals("S000099", r.getRecords().get(0).getStudentId());
+        assertEquals("软件工程", r.getRecords().get(0).getCourseName());
     }
 
     /**
@@ -201,11 +255,11 @@ class EnrollmentServiceTest {
         assertEquals(1000, r.getOutputCount());
         assertTrue(processMs <= 1000, "处理应 ≤1s，实际 " + processMs + "ms");
 
-        MultiSearchRequest ms = new MultiSearchRequest();
+        UnifiedSearchRequest ms = new UnifiedSearchRequest();
         ms.setRecords(r.getRecords());
         ms.setCourseType(EnrollmentService.TYPE_MAJOR);
         long t1 = System.nanoTime();
-        SearchResult s = service.searchMulti(ms);
+        SearchResult s = service.searchUnified(ms);
         long searchMs = (System.nanoTime() - t1) / 1_000_000L;
         log.info("【性能-组合检索】命中={} 耗时={}ms 服务端统计={}ms", s.getRecords().size(), searchMs, s.getElapsedMs());
         assertTrue(s.isMatched());

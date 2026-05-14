@@ -1,5 +1,8 @@
 package com.campus.enrollment.web;
 
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -8,9 +11,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.ByteArrayOutputStream;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,6 +50,38 @@ class EnrollmentIntegrationTest {
     }
 
     /**
+     * Excel 导入接口应返回 code=200。
+     */
+    @Test
+    @DisplayName("POST /process-excel")
+    void processExcel_ok() throws Exception {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sh = wb.createSheet();
+            Row h = sh.createRow(0);
+            h.createCell(0).setCellValue("学生ID");
+            h.createCell(1).setCellValue("课程ID");
+            h.createCell(2).setCellValue("课程名称");
+            Row d = sh.createRow(1);
+            d.createCell(0).setCellValue("S000010");
+            d.createCell(1).setCellValue("C000010");
+            d.createCell(2).setCellValue("大学英语");
+            d.createCell(3).setCellValue("公共课");
+            wb.write(bos);
+        }
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "e.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                bos.toByteArray());
+        mockMvc.perform(multipart("/api/enrollment/process-excel").file(file))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.outputCount").value(1));
+        log.info("【集成】/process-excel 校验通过");
+    }
+
+    /**
      * 样例接口应返回统一封装下的列表数据。
      */
     @Test
@@ -68,19 +107,19 @@ class EnrollmentIntegrationTest {
     }
 
     /**
-     * 组合检索接口可用且返回封装结构。
+     * 统一检索：多列 AND。
      */
     @Test
-    @DisplayName("POST /search-multi")
-    void searchMulti_ok() throws Exception {
+    @DisplayName("POST /search 统一检索")
+    void search_unified_ok() throws Exception {
         String json = """
                 {"records":[{"studentId":"S000001","courseId":"C000001","courseName":"A","courseType":"专业课"}],
                 "studentId":"S000001","courseType":"专业课"}
                 """;
-        mockMvc.perform(post("/api/enrollment/search-multi").contentType(MediaType.APPLICATION_JSON).content(json))
+        mockMvc.perform(post("/api/enrollment/search").contentType(MediaType.APPLICATION_JSON).content(json))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.matched").value(true));
-        log.info("【集成】/search-multi 校验通过");
+        log.info("【集成】/search 统一检索校验通过");
     }
 }

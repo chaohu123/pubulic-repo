@@ -24,7 +24,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleNotReadable(HttpMessageNotReadableException ex) {
-        log.warn("请求体解析失败: {}", ex.getMessage());
+        log.warn("request body parse failed: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.fail(400, "数据格式错误"));
     }
@@ -38,7 +38,7 @@ public class GlobalExceptionHandler {
                 .findFirst()
                 .map(fe -> fe.getDefaultMessage())
                 .orElse("参数校验失败");
-        log.warn("参数校验失败: {}", msg);
+        log.warn("validation failed: {}", msg);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.fail(400, msg));
     }
@@ -48,7 +48,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
-        log.warn("业务异常 code={} message={}", ex.getCode(), ex.getMessage());
+        log.warn("businessException code={} message={}", ex.getCode(), ex.getMessage());
         HttpStatus status = ex.getCode() >= 500 ? HttpStatus.INTERNAL_SERVER_ERROR : HttpStatus.BAD_REQUEST;
         return ResponseEntity.status(status).body(ApiResponse.fail(ex.getCode(), ex.getMessage()));
     }
@@ -58,7 +58,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleAny(Exception ex) {
-        log.error("系统异常", ex);
+        log.error("unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail(500, "服务器内部错误：" + ex.getClass().getSimpleName()));
     }

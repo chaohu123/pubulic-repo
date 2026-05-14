@@ -6,79 +6,395 @@
     <title>高校选课管理 — 批量导入与展示</title>
     <style>
         :root {
-            --bg: #f5f6f8;
+            --bg: #eef2f7;
+            --bg-pattern: radial-gradient(ellipse 120% 80% at 50% -20%, #dbeafe 0%, transparent 50%);
             --card: #ffffff;
-            --border: #e2e5eb;
-            --text: #1f2933;
-            --muted: #5f6b7a;
+            --border: #e2e8f0;
+            --text: #0f172a;
+            --muted: #64748b;
             --accent: #2563eb;
+            --accent-soft: #eff6ff;
             --accent-hover: #1d4ed8;
-            --ok: #047857;
-            --err: #b91c1c;
+            --ok: #059669;
+            --err: #dc2626;
+            --warn-bg: #fffbeb;
+            --warn-border: #fde68a;
+            --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+            --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
+            --radius: 10px;
+            --radius-sm: 8px;
         }
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
-        header { background: var(--card); border-bottom: 1px solid var(--border); padding: 1rem 1.5rem; }
-        header h1 { margin: 0; font-size: 1.15rem; font-weight: 600; }
-        header p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.9rem; }
-        main { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1rem 2rem; }
-        section { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
-        section h2 { margin: 0 0 0.75rem; font-size: 1rem; font-weight: 600; }
-        textarea { width: 100%; min-height: 140px; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; resize: vertical; }
-        .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.6rem; }
-        button { cursor: pointer; border: none; border-radius: 6px; padding: 0.45rem 0.9rem; font-size: 0.9rem; background: var(--accent); color: #fff; }
-        button:disabled { opacity: 0.55; cursor: not-allowed; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+            background: var(--bg);
+            background-image: var(--bg-pattern);
+            color: var(--text);
+            line-height: 1.55;
+            min-height: 100vh;
+        }
+        .site-header {
+            background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 48%, #2563eb 100%);
+            color: #f8fafc;
+            padding: 1.25rem 1.5rem 1.35rem;
+            box-shadow: var(--shadow-md);
+        }
+        .site-header h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 650;
+            letter-spacing: 0.02em;
+        }
+        .site-header p {
+            margin: 0.4rem 0 0;
+            opacity: 0.88;
+            font-size: 0.875rem;
+            max-width: 52rem;
+        }
+        .site-main {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 1.35rem 1rem 2.5rem;
+        }
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.1rem 1.2rem 1.2rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow-sm);
+            border-left: 4px solid var(--accent);
+        }
+        .panel h2 {
+            margin: 0 0 0.65rem;
+            font-size: 1rem;
+            font-weight: 650;
+            color: #1e293b;
+        }
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 0.7rem 0.85rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+            font-size: 0.8125rem;
+            resize: vertical;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            background: #fafbfc;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+            background: #fff;
+        }
+        .field-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.65rem 1rem;
+            align-items: end;
+            margin-top: 0.75rem;
+        }
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        .field label { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: none; }
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            margin-top: 0.75rem;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            align-items: center;
+            margin-top: 0.85rem;
+            padding-top: 0.75rem;
+            border-top: 1px dashed var(--border);
+        }
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
+            transition: background 0.15s, transform 0.1s;
+        }
+        button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
         button:hover:not(:disabled) { background: var(--accent-hover); }
-        button.secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
-        button.secondary:hover:not(:disabled) { background: #f3f4f6; }
-        label { font-size: 0.85rem; color: var(--muted); }
-        select, input[type="text"] { padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; }
-        .meta { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
-        .warn { color: #b45309; font-size: 0.9rem; margin-top: 0.35rem; }
-        .okmsg { color: var(--ok); font-size: 0.9rem; margin-top: 0.35rem; font-weight: 500; }
-        .errmsg { color: var(--err); font-size: 0.9rem; margin-top: 0.35rem; font-weight: 500; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-        th, td { border: 1px solid var(--border); padding: 0.45rem 0.5rem; text-align: left; }
-        th { background: #f9fafb; font-weight: 600; }
-        .pill { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 999px; font-size: 0.78rem; background: #eef2ff; color: #3730a3; }
-        .group-title { margin: 0.75rem 0 0.35rem; font-size: 0.9rem; font-weight: 600; color: var(--muted); }
-        .stats { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.5rem 0; font-size: 0.9rem; }
-        .stats span { background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 6px; }
-        .pager { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; }
+        button:active:not(:disabled) { transform: scale(0.98); }
+        button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        button.secondary {
+            background: #fff;
+            color: var(--text);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+        }
+        button.secondary:hover:not(:disabled) { background: #f8fafc; border-color: #cbd5e1; }
+        select, input[type="text"] {
+            padding: 0.45rem 0.6rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            background: #fff;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            min-width: 0;
+        }
+        select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+        .row label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.875rem;
+            color: var(--muted);
+        }
+        label:has(input[type="checkbox"]) {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.875rem;
+            color: var(--text);
+            cursor: pointer;
+        }
+        input[type="checkbox"] {
+            width: 1rem;
+            height: 1rem;
+            accent-color: var(--accent);
+        }
+        .file-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.65rem;
+            margin-top: 0.65rem;
+            padding: 0.65rem 0.75rem;
+            background: var(--accent-soft);
+            border-radius: var(--radius-sm);
+            border: 1px solid #bfdbfe;
+        }
+        .file-row input[type="file"] {
+            font-size: 0.8rem;
+            max-width: 100%;
+        }
+        .meta {
+            font-size: 0.8125rem;
+            color: var(--muted);
+            margin-top: 0.5rem;
+            line-height: 1.6;
+        }
+        .meta code {
+            font-size: 0.78em;
+            background: #f1f5f9;
+            padding: 0.12em 0.35em;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+        }
+        .warn {
+            color: #92400e;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+            padding: 0.55rem 0.75rem;
+            background: var(--warn-bg);
+            border: 1px solid var(--warn-border);
+            border-radius: var(--radius-sm);
+        }
+        .okmsg {
+            color: var(--ok);
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+            font-weight: 600;
+            padding: 0.45rem 0;
+        }
+        .errmsg {
+            color: var(--err);
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+            font-weight: 600;
+            padding: 0.45rem 0;
+        }
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 0.65rem 0 0;
+            font-size: 0.8125rem;
+        }
+        .stats span {
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+            padding: 0.35rem 0.65rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            font-weight: 500;
+        }
+        .stats span strong { color: var(--accent); font-weight: 700; }
+        .table-scroll {
+            overflow-x: auto;
+            margin-top: 0.35rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8125rem;
+            min-width: 640px;
+        }
+        .data-table th, .data-table td {
+            border-bottom: 1px solid var(--border);
+            padding: 0.5rem 0.6rem;
+            text-align: left;
+        }
+        .data-table th {
+            background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+            font-weight: 650;
+            color: #475569;
+            white-space: nowrap;
+        }
+        .data-table tbody tr:nth-child(even) { background: #fafbfc; }
+        .data-table tbody tr:hover { background: #eff6ff; }
+        .data-table tbody tr:last-child td { border-bottom: none; }
+        .pill {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: var(--accent-soft);
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+        .group-title {
+            margin: 0.85rem 0 0.4rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #475569;
+        }
+        .pager {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin-top: 0.65rem;
+            flex-wrap: wrap;
+            padding: 0.45rem 0;
+        }
+        .pager span {
+            font-size: 0.8125rem;
+            color: var(--muted);
+            font-weight: 500;
+        }
+        .empty-panel {
+            text-align: center;
+            padding: 2rem 1.25rem;
+            background: #f8fafc;
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            margin-top: 0.35rem;
+        }
+        .empty-panel .empty-title {
+            margin: 0 0 0.35rem;
+            font-size: 1rem;
+            font-weight: 650;
+            color: #64748b;
+        }
         #loadingOverlay {
-            position: fixed; inset: 0; background: rgba(255,255,255,0.65); display: none;
-            align-items: center; justify-content: center; z-index: 9999; font-size: 1rem; color: var(--muted);
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.28);
+            backdrop-filter: blur(2px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
         }
         #loadingOverlay.show { display: flex; }
+        .overlay-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            background: #fff;
+            padding: 1.25rem 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
         .spinner {
-            width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent);
-            border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 0.75rem;
+            width: 38px;
+            height: 38px;
+            border: 3px solid #e2e8f0;
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+            flex-shrink: 0;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         #toast {
-            position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%) translateY(120%);
-            background: #111827; color: #fff; padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.9rem;
-            transition: transform 0.25s ease; z-index: 10000; max-width: 90vw;
+            position: fixed;
+            bottom: 1.35rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(140%);
+            background: #0f172a;
+            color: #fff;
+            padding: 0.65rem 1.15rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+            z-index: 10000;
+            max-width: min(90vw, 420px);
+            box-shadow: var(--shadow-md);
         }
         #toast.show { transform: translateX(-50%) translateY(0); }
-        #toast.error { background: var(--err); }
-        #toast.success { background: var(--ok); }
+        #toast.error { background: #991b1b; }
+        #toast.success { background: #047857; }
+        @media (max-width: 640px) {
+            .site-header { padding: 1rem; }
+            .panel { padding: 1rem; border-left-width: 3px; }
+        }
     </style>
 </head>
 <body>
-<div id="loadingOverlay" aria-hidden="true"><div class="spinner"></div><span>处理中，请稍候…</span></div>
+<div id="loadingOverlay" aria-hidden="true">
+    <div class="overlay-card">
+        <div class="spinner" aria-hidden="true"></div>
+        <span>处理中，请稍候…</span>
+    </div>
+</div>
 <div id="toast" role="status"></div>
 
-<header>
+<header class="site-header">
     <h1>高校选课管理系统 · 学生选课处理</h1>
-    <p>CSV 批量导入 → 后端去重、排序、分类 → 统计、分页、导出、组合检索（Spring Boot 3）</p>
+    <p>CSV / Excel 批量导入 → 后端去重、排序、分类 → 统一检索、分页、导出（Spring Boot 3）</p>
 </header>
-<main>
-    <section>
-        <h2>① 数据批量导入（CSV，每行一条）</h2>
-        <p class="meta">格式：<code>学生ID,课程ID,课程名称[,课程类型]</code>；类型可省略，由后端自动推断。</p>
-        <textarea id="csvInput" spellcheck="false"></textarea>
-        <div class="row">
+<main class="site-main">
+    <section class="panel">
+        <h2>① 数据批量导入</h2>
+        <p class="meta"><b>CSV</b>：每行一条，<code>学生ID,课程ID,课程名称[,课程类型]</code>；类型可省略。</p>
+        <textarea id="csvInput" spellcheck="false" placeholder="在此粘贴 CSV，或先选择 Excel 上传…"></textarea>
+        <p class="meta" style="margin-top:0.75rem"><b>Excel</b>：仅支持 <code>.xlsx</code>；首工作表 <b>A 学生ID、B 课程ID、C 课程名称、D 课程类型（可选）</b>；首行可为表头（含「学生ID」等关键字时自动跳过）。</p>
+        <div class="file-row">
+            <input type="file" id="excelFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="选择 Excel 文件" />
+            <button type="button" class="secondary" id="btnExcelImport">上传 Excel 并处理</button>
+        </div>
+        <div class="toolbar">
             <button type="button" id="btnImport">导入并处理</button>
             <button type="button" class="secondary" id="btnSample">加载后端样例</button>
             <button type="button" class="secondary" id="btnLoad100">加载测试数据(100)</button>
@@ -99,46 +415,57 @@
         </div>
     </section>
 
-    <section>
-        <h2>② 单维检索</h2>
-        <div class="row">
-            <label for="searchType">维度</label>
-            <select id="searchType">
-                <option value="STUDENT_ID">学生ID</option>
-                <option value="COURSE_ID">课程ID</option>
-                <option value="COURSE_NAME">课程名称</option>
-                <option value="COURSE_TYPE">课程类型</option>
-            </select>
-            <label for="keyword">关键词</label>
-            <input type="text" id="keyword" placeholder="留空则显示当前主数据全量" />
-            <button type="button" class="secondary" id="btnSearch">检索</button>
-            <button type="button" class="secondary" id="btnResetSearch">恢复主数据视图</button>
+    <section class="panel">
+        <h2>② 统一检索（多列 AND + 可选快捷维度）</h2>
+        <p class="meta">可同时填写多列与下方「快捷维度+关键词」；全部留空则显示主数据全量。条件之间为 <b>AND</b>。</p>
+        <div class="field-grid">
+            <div class="field">
+                <label for="uStudentId">学生ID（含）</label>
+                <input type="text" id="uStudentId" placeholder="如 S000001" autocomplete="off" />
+            </div>
+            <div class="field">
+                <label for="uCourseId">课程ID（含）</label>
+                <input type="text" id="uCourseId" placeholder="如 C000001" autocomplete="off" />
+            </div>
+            <div class="field">
+                <label for="uCourseName">课程名称（含）</label>
+                <input type="text" id="uCourseName" placeholder="关键字" autocomplete="off" />
+            </div>
+            <div class="field">
+                <label for="uCourseType">课程类型</label>
+                <select id="uCourseType">
+                    <option value="">不限</option>
+                    <option value="公共课">公共课</option>
+                    <option value="专业课">专业课</option>
+                    <option value="选修课">选修课</option>
+                </select>
+            </div>
+        </div>
+        <div class="field-grid" style="margin-top:0.5rem">
+            <div class="field">
+                <label for="uQuickDim">快捷维度</label>
+                <select id="uQuickDim">
+                    <option value="">（不启用快捷关键词）</option>
+                    <option value="STUDENT_ID">学生ID</option>
+                    <option value="COURSE_ID">课程ID</option>
+                    <option value="COURSE_NAME">课程名称</option>
+                    <option value="COURSE_TYPE">课程类型</option>
+                </select>
+            </div>
+            <div class="field" style="grid-column: span 2;">
+                <label for="uQuickKw">快捷关键词</label>
+                <input type="text" id="uQuickKw" placeholder="与快捷维度同时使用；可与上方多列组合" autocomplete="off" />
+            </div>
+        </div>
+        <div class="toolbar" style="border-top:none;padding-top:0.5rem">
+            <button type="button" id="btnUnifiedSearch">检索</button>
+            <button type="button" class="secondary" id="btnResetSearch">清空条件并恢复主数据</button>
         </div>
         <div class="warn" id="searchMsg" hidden></div>
     </section>
 
-    <section>
-        <h2>③ 多条件组合检索（AND）</h2>
-        <div class="row">
-            <label>学生ID(含)</label>
-            <input type="text" id="mStudentId" placeholder="如 S0001" />
-            <label>课程ID(含)</label>
-            <input type="text" id="mCourseId" placeholder="如 C0001" />
-            <label>课程名称(含)</label>
-            <input type="text" id="mCourseName" placeholder="关键字" />
-            <label>课程类型</label>
-            <select id="mCourseType">
-                <option value="">不限</option>
-                <option value="公共课">公共课</option>
-                <option value="专业课">专业课</option>
-                <option value="选修课">选修课</option>
-            </select>
-            <button type="button" class="secondary" id="btnMultiSearch">组合检索</button>
-        </div>
-    </section>
-
-    <section>
-        <h2>④ 排序切换</h2>
+    <section class="panel">
+        <h2>③ 排序切换</h2>
         <div class="row">
             <label for="sortField">排序字段</label>
             <select id="sortField">
@@ -151,8 +478,8 @@
         </div>
     </section>
 
-    <section>
-        <h2>⑤ 数据展示（按课程类型分组 · 每页 10 条）</h2>
+    <section class="panel">
+        <h2>④ 数据展示（按课程类型分组 · 每页 10 条）</h2>
         <div class="pager" id="pagerTop" hidden>
             <button type="button" class="secondary" id="btnPrev">上一页</button>
             <span id="pageInfo"></span>
@@ -240,26 +567,46 @@
         return readApiJson(res);
     }
 
-    async function postSearch(records, searchType, keyword) {
+    async function postUnifiedSearch(payload) {
         const res = await fetch("/api/enrollment/search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ records, searchType, keyword })
+            body: JSON.stringify(payload)
         });
         const j = await res.json();
         if (!res.ok || j.code !== 200) throw new Error(j.message || "检索失败");
         return j.data;
     }
 
-    async function postSearchMulti(body) {
-        const res = await fetch("/api/enrollment/search-multi", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-        });
-        const j = await res.json();
-        if (!res.ok || j.code !== 200) throw new Error(j.message || "组合检索失败");
-        return j.data;
+    /** 组装统一检索请求体（空字符串转为 null，便于后端识别「未填」） */
+    function buildUnifiedSearchPayload(records) {
+        const nz = (v) => {
+            const t = (v == null ? "" : String(v)).trim();
+            return t.length ? t : null;
+        };
+        const quickDim = document.getElementById("uQuickDim").value;
+        const quickKw = nz(document.getElementById("uQuickKw").value);
+        return {
+            records,
+            studentId: nz(document.getElementById("uStudentId").value),
+            courseId: nz(document.getElementById("uCourseId").value),
+            courseName: nz(document.getElementById("uCourseName").value),
+            courseType: nz(document.getElementById("uCourseType").value),
+            quickDimension: quickDim ? quickDim : null,
+            quickKeyword: quickKw
+        };
+    }
+
+    /** Excel 文件上传并走服务端解析管道 */
+    async function postProcessExcel(file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/enrollment/process-excel", { method: "POST", body: fd });
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.message || "Excel 处理失败");
+        }
+        return readApiJson(res);
     }
 
     async function postSort(records, sortField, ascending) {
@@ -315,7 +662,7 @@
 
     function renderPagedTable() {
         if (!viewRecords.length) {
-            tables.innerHTML = "<p class=\"meta\">暂无数据。请导入 CSV、加载样例或加载测试数据。</p>";
+            tables.innerHTML = "<div class=\"empty-panel\"><p class=\"empty-title\">暂无数据</p><p class=\"meta\">请导入 CSV、上传 Excel、加载样例或加载测试数据。</p></div>";
             document.getElementById("pagerTop").hidden = true;
             document.getElementById("pagerBottom").hidden = true;
             return;
@@ -340,12 +687,12 @@
             const list = byType[k];
             if (!list) continue;
             html += `<div class="group-title"><span class="pill">${escapeHtml(k)}</span> · 本页 ${list.length} 条</div>`;
-            html += "<table><thead><tr><th>学生ID</th><th>课程ID</th><th>课程名称</th><th>课程类型</th><th>格式化输出</th></tr></thead><tbody>";
+            html += "<div class=\"table-scroll\"><table class=\"data-table\"><thead><tr><th>学生ID</th><th>课程ID</th><th>课程名称</th><th>课程类型</th><th>格式化输出</th></tr></thead><tbody>";
             for (const r of list) {
                 const line = `学生ID：${r.studentId}，课程ID：${r.courseId}，课程名称：${r.courseName}`;
                 html += `<tr><td>${escapeHtml(r.studentId)}</td><td>${escapeHtml(r.courseId)}</td><td>${escapeHtml(r.courseName)}</td><td>${escapeHtml(r.courseType || "")}</td><td>${escapeHtml(line)}</td></tr>`;
             }
-            html += "</tbody></table>";
+            html += "</tbody></table></div>";
         }
         tables.innerHTML = html;
     }
@@ -365,6 +712,37 @@
         if (processData) updateStatsFromProcess(processData);
         renderPagedTable();
     }
+
+    document.getElementById("btnExcelImport").addEventListener("click", async () => {
+        const f = document.getElementById("excelFile").files[0];
+        if (!f) {
+            showToast("请先选择 .xlsx 文件", "error");
+            return;
+        }
+        setSearchMessage("", false);
+        setImportMessages("", "");
+        setLoading(true);
+        try {
+            const data = await postProcessExcel(f);
+            applyMasterAndView(data.records, data);
+            processMeta.textContent = `Excel 处理耗时：${data.elapsedMs} ms · ${data.message || ""}`;
+            if (data.warnings && data.warnings.length) {
+                processMeta.textContent += " | 告警：" + data.warnings.slice(0, 3).join("；");
+            }
+            setImportMessages("Excel 导入成功：输出 " + data.outputCount + " 条。", "");
+            showToast("Excel 导入成功", "success");
+        } catch (e) {
+            processMeta.textContent = "";
+            updateStatsFromProcess(null);
+            masterRecords = [];
+            viewRecords = [];
+            renderPagedTable();
+            setImportMessages("", "Excel 导入失败：" + (e.message || e));
+            showToast("Excel 导入失败", "error");
+        } finally {
+            setLoading(false);
+        }
+    });
 
     document.getElementById("btnImport").addEventListener("click", async () => {
         setSearchMessage("", false);
@@ -446,6 +824,7 @@
         setSearchMessage("", false);
         statsBar.hidden = true;
         renderPagedTable();
+        document.getElementById("excelFile").value = "";
         showToast("已清空数据", "success");
     });
 
@@ -480,9 +859,7 @@
         }
     });
 
-    document.getElementById("btnSearch").addEventListener("click", async () => {
-        const searchType = document.getElementById("searchType").value;
-        const keyword = document.getElementById("keyword").value.trim();
+    document.getElementById("btnUnifiedSearch").addEventListener("click", async () => {
         setSearchMessage("", false);
         if (!masterRecords.length) {
             setSearchMessage("请先导入或加载数据。", true);
@@ -490,7 +867,8 @@
         }
         setLoading(true);
         try {
-            const data = await postSearch(masterRecords, searchType, keyword);
+            const payload = buildUnifiedSearchPayload(masterRecords);
+            const data = await postUnifiedSearch(payload);
             if (!data.matched) {
                 setSearchMessage(data.message || "无匹配选课记录", true);
                 viewRecords = [];
@@ -507,42 +885,16 @@
     });
 
     document.getElementById("btnResetSearch").addEventListener("click", () => {
-        document.getElementById("keyword").value = "";
+        document.getElementById("uStudentId").value = "";
+        document.getElementById("uCourseId").value = "";
+        document.getElementById("uCourseName").value = "";
+        document.getElementById("uCourseType").value = "";
+        document.getElementById("uQuickDim").value = "";
+        document.getElementById("uQuickKw").value = "";
         setSearchMessage("", false);
         viewRecords = [...masterRecords];
         currentPage = 1;
         renderPagedTable();
-    });
-
-    document.getElementById("btnMultiSearch").addEventListener("click", async () => {
-        setSearchMessage("", false);
-        if (!masterRecords.length) {
-            setSearchMessage("请先导入或加载数据。", true);
-            return;
-        }
-        setLoading(true);
-        try {
-            const body = {
-                records: masterRecords,
-                studentId: document.getElementById("mStudentId").value.trim() || null,
-                courseId: document.getElementById("mCourseId").value.trim() || null,
-                courseName: document.getElementById("mCourseName").value.trim() || null,
-                courseType: document.getElementById("mCourseType").value || null
-            };
-            const data = await postSearchMulti(body);
-            if (!data.matched) {
-                setSearchMessage(data.message || "无匹配选课记录", true);
-                viewRecords = [];
-            } else {
-                viewRecords = data.records || [];
-            }
-            currentPage = 1;
-            renderPagedTable();
-        } catch (e) {
-            setSearchMessage(e.message || String(e), true);
-        } finally {
-            setLoading(false);
-        }
     });
 
     document.getElementById("btnSort").addEventListener("click", async () => {
