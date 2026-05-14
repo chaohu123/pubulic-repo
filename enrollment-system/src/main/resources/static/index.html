@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>高校选课管理 — 批量导入与展示</title>
+    <style>
+        :root {
+            --bg: #f5f6f8;
+            --card: #ffffff;
+            --border: #e2e5eb;
+            --text: #1f2933;
+            --muted: #5f6b7a;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --ok: #047857;
+            --err: #b91c1c;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+        header { background: var(--card); border-bottom: 1px solid var(--border); padding: 1rem 1.5rem; }
+        header h1 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+        header p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.9rem; }
+        main { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1rem 2rem; }
+        section { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
+        section h2 { margin: 0 0 0.75rem; font-size: 1rem; font-weight: 600; }
+        textarea { width: 100%; min-height: 140px; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; resize: vertical; }
+        .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.6rem; }
+        button { cursor: pointer; border: none; border-radius: 6px; padding: 0.45rem 0.9rem; font-size: 0.9rem; background: var(--accent); color: #fff; }
+        button:disabled { opacity: 0.55; cursor: not-allowed; }
+        button:hover:not(:disabled) { background: var(--accent-hover); }
+        button.secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
+        button.secondary:hover:not(:disabled) { background: #f3f4f6; }
+        label { font-size: 0.85rem; color: var(--muted); }
+        select, input[type="text"] { padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; }
+        .meta { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+        .warn { color: #b45309; font-size: 0.9rem; margin-top: 0.35rem; }
+        .okmsg { color: var(--ok); font-size: 0.9rem; margin-top: 0.35rem; font-weight: 500; }
+        .errmsg { color: var(--err); font-size: 0.9rem; margin-top: 0.35rem; font-weight: 500; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        th, td { border: 1px solid var(--border); padding: 0.45rem 0.5rem; text-align: left; }
+        th { background: #f9fafb; font-weight: 600; }
+        .pill { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 999px; font-size: 0.78rem; background: #eef2ff; color: #3730a3; }
+        .group-title { margin: 0.75rem 0 0.35rem; font-size: 0.9rem; font-weight: 600; color: var(--muted); }
+        .stats { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.5rem 0; font-size: 0.9rem; }
+        .stats span { background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 6px; }
+        .pager { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; }
+        #loadingOverlay {
+            position: fixed; inset: 0; background: rgba(255,255,255,0.65); display: none;
+            align-items: center; justify-content: center; z-index: 9999; font-size: 1rem; color: var(--muted);
+        }
+        #loadingOverlay.show { display: flex; }
+        .spinner {
+            width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 0.75rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #toast {
+            position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%) translateY(120%);
+            background: #111827; color: #fff; padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.9rem;
+            transition: transform 0.25s ease; z-index: 10000; max-width: 90vw;
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); }
+        #toast.error { background: var(--err); }
+        #toast.success { background: var(--ok); }
+    </style>
+</head>
+<body>
+<div id="loadingOverlay" aria-hidden="true"><div class="spinner"></div><span>处理中，请稍候…</span></div>
+<div id="toast" role="status"></div>
+
+<header>
+    <h1>高校选课管理系统 · 学生选课处理</h1>
+    <p>CSV 批量导入 → 后端去重、排序、分类 → 统计、分页、导出、组合检索（Spring Boot 3）</p>
+</header>
+<main>
+    <section>
+        <h2>① 数据批量导入（CSV，每行一条）</h2>
+        <p class="meta">格式：<code>学生ID,课程ID,课程名称[,课程类型]</code>；类型可省略，由后端自动推断。</p>
+        <textarea id="csvInput" spellcheck="false"></textarea>
+        <div class="row">
+            <button type="button" id="btnImport">导入并处理</button>
+            <button type="button" class="secondary" id="btnSample">加载后端样例</button>
+            <button type="button" class="secondary" id="btnLoad100">加载测试数据(100)</button>
+            <button type="button" class="secondary" id="btnLoad500">加载测试数据(500)</button>
+            <button type="button" class="secondary" id="btnLoad1000">加载测试数据(1000)</button>
+            <button type="button" class="secondary" id="btnClearInput">清空文本框</button>
+            <button type="button" class="secondary" id="btnClearAll">清空数据</button>
+            <button type="button" class="secondary" id="btnExport">导出当前列表 CSV</button>
+        </div>
+        <div class="okmsg" id="importOk" hidden></div>
+        <div class="errmsg" id="importErr" hidden></div>
+        <div class="meta" id="processMeta"></div>
+        <div class="stats" id="statsBar" hidden>
+            <span>总记录数：<strong id="stTotal">0</strong></span>
+            <span>专业课：<strong id="stMajor">0</strong></span>
+            <span>公共课：<strong id="stPublic">0</strong></span>
+            <span>选修课：<strong id="stElective">0</strong></span>
+        </div>
+    </section>
+
+    <section>
+        <h2>② 单维检索</h2>
+        <div class="row">
+            <label for="searchType">维度</label>
+            <select id="searchType">
+                <option value="STUDENT_ID">学生ID</option>
+                <option value="COURSE_ID">课程ID</option>
+                <option value="COURSE_NAME">课程名称</option>
+                <option value="COURSE_TYPE">课程类型</option>
+            </select>
+            <label for="keyword">关键词</label>
+            <input type="text" id="keyword" placeholder="留空则显示当前主数据全量" />
+            <button type="button" class="secondary" id="btnSearch">检索</button>
+            <button type="button" class="secondary" id="btnResetSearch">恢复主数据视图</button>
+        </div>
+        <div class="warn" id="searchMsg" hidden></div>
+    </section>
+
+    <section>
+        <h2>③ 多条件组合检索（AND）</h2>
+        <div class="row">
+            <label>学生ID(含)</label>
+            <input type="text" id="mStudentId" placeholder="如 S0001" />
+            <label>课程ID(含)</label>
+            <input type="text" id="mCourseId" placeholder="如 C0001" />
+            <label>课程名称(含)</label>
+            <input type="text" id="mCourseName" placeholder="关键字" />
+            <label>课程类型</label>
+            <select id="mCourseType">
+                <option value="">不限</option>
+                <option value="公共课">公共课</option>
+                <option value="专业课">专业课</option>
+                <option value="选修课">选修课</option>
+            </select>
+            <button type="button" class="secondary" id="btnMultiSearch">组合检索</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>④ 排序切换</h2>
+        <div class="row">
+            <label for="sortField">排序字段</label>
+            <select id="sortField">
+                <option value="STUDENT_ID">学生ID</option>
+                <option value="COURSE_ID">课程ID</option>
+                <option value="COURSE_NAME">课程名称</option>
+            </select>
+            <label><input type="checkbox" id="sortAsc" checked /> 升序</label>
+            <button type="button" class="secondary" id="btnSort">应用排序</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>⑤ 数据展示（按课程类型分组 · 每页 10 条）</h2>
+        <div class="pager" id="pagerTop" hidden>
+            <button type="button" class="secondary" id="btnPrev">上一页</button>
+            <span id="pageInfo"></span>
+            <button type="button" class="secondary" id="btnNext">下一页</button>
+        </div>
+        <div id="tables"></div>
+        <div class="pager" id="pagerBottom" hidden>
+            <button type="button" class="secondary" id="btnPrev2">上一页</button>
+            <span id="pageInfo2"></span>
+            <button type="button" class="secondary" id="btnNext2">下一页</button>
+        </div>
+    </section>
+</main>
+
+<script>
+    const PAGE_SIZE = 10;
+    const LOCAL_SAMPLE = [
+        "S000010,C000020,大学体育,公共课",
+        "S000010,C000021,数据结构与算法,专业课",
+        "S000010,C000020,大学体育,公共课",
+        "S000011,C000021,数据结构与算法,专业课"
+    ].join("\n");
+
+    /** 主数据：最近一次成功导入/处理后的完整列表 */
+    let masterRecords = [];
+    /** 当前用于展示与分页的列表（检索/排序后的视图） */
+    let viewRecords = [];
+    let currentPage = 1;
+
+    const csvInput = document.getElementById("csvInput");
+    const processMeta = document.getElementById("processMeta");
+    const tables = document.getElementById("tables");
+    const searchMsg = document.getElementById("searchMsg");
+    const importOk = document.getElementById("importOk");
+    const importErr = document.getElementById("importErr");
+    const statsBar = document.getElementById("statsBar");
+    const loadingOverlay = document.getElementById("loadingOverlay");
+    const toast = document.getElementById("toast");
+
+    function setLoading(on) {
+        loadingOverlay.classList.toggle("show", on);
+        loadingOverlay.setAttribute("aria-hidden", on ? "false" : "true");
+        document.querySelectorAll("main button").forEach(b => { b.disabled = on; });
+    }
+
+    function showToast(text, type) {
+        toast.textContent = text;
+        toast.className = type === "error" ? "error" : "success";
+        toast.classList.add("show");
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(() => toast.classList.remove("show"), 2600);
+    }
+
+    function setImportMessages(okText, errText) {
+        if (okText) { importOk.textContent = okText; importOk.hidden = false; } else { importOk.hidden = true; }
+        if (errText) { importErr.textContent = errText; importErr.hidden = false; } else { importErr.hidden = true; }
+    }
+
+    function setSearchMessage(text, visible) {
+        searchMsg.textContent = text || "";
+        searchMsg.hidden = !visible;
+    }
+
+    /** 解析统一 JSON 封装 */
+    async function readApiJson(res) {
+        const j = await res.json().catch(() => ({}));
+        if (j.code !== 200) {
+            const err = new Error(j.message || "请求失败");
+            err.code = j.code;
+            throw err;
+        }
+        return j.data;
+    }
+
+    async function postProcess(csv) {
+        const res = await fetch("/api/enrollment/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ csv })
+        });
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.message || "处理失败");
+        }
+        return readApiJson(res);
+    }
+
+    async function postSearch(records, searchType, keyword) {
+        const res = await fetch("/api/enrollment/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ records, searchType, keyword })
+        });
+        const j = await res.json();
+        if (!res.ok || j.code !== 200) throw new Error(j.message || "检索失败");
+        return j.data;
+    }
+
+    async function postSearchMulti(body) {
+        const res = await fetch("/api/enrollment/search-multi", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        const j = await res.json();
+        if (!res.ok || j.code !== 200) throw new Error(j.message || "组合检索失败");
+        return j.data;
+    }
+
+    async function postSort(records, sortField, ascending) {
+        const res = await fetch("/api/enrollment/sort", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ records, sortField, ascending })
+        });
+        const j = await res.json();
+        if (!res.ok || j.code !== 200) throw new Error(j.message || "排序失败");
+        return j.data;
+    }
+
+    async function getSample() {
+        const res = await fetch("/api/enrollment/sample");
+        const j = await res.json();
+        if (!res.ok || j.code !== 200) throw new Error(j.message || "样例失败");
+        return j.data;
+    }
+
+    async function fetchMockCsv(size) {
+        const res = await fetch("/api/enrollment/mock-csv?size=" + size);
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.message || "获取测试数据失败");
+        }
+        return res.text();
+    }
+
+    function updateStatsFromProcess(data) {
+        if (!data || data.outputCount === 0) {
+            statsBar.hidden = true;
+            return;
+        }
+        statsBar.hidden = false;
+        document.getElementById("stTotal").textContent = data.outputCount;
+        document.getElementById("stMajor").textContent = data.statMajor ?? 0;
+        document.getElementById("stPublic").textContent = data.statPublic ?? 0;
+        document.getElementById("stElective").textContent = data.statElective ?? 0;
+    }
+
+    function totalPages() {
+        return Math.max(1, Math.ceil(viewRecords.length / PAGE_SIZE));
+    }
+
+    function slicePage() {
+        const tp = totalPages();
+        if (currentPage > tp) currentPage = tp;
+        if (currentPage < 1) currentPage = 1;
+        const start = (currentPage - 1) * PAGE_SIZE;
+        return viewRecords.slice(start, start + PAGE_SIZE);
+    }
+
+    function renderPagedTable() {
+        if (!viewRecords.length) {
+            tables.innerHTML = "<p class=\"meta\">暂无数据。请导入 CSV、加载样例或加载测试数据。</p>";
+            document.getElementById("pagerTop").hidden = true;
+            document.getElementById("pagerBottom").hidden = true;
+            return;
+        }
+        const pageRows = slicePage();
+        const info = "第 " + currentPage + " / " + totalPages() + " 页（每页 " + PAGE_SIZE + " 条，共 " + viewRecords.length + " 条）";
+        document.getElementById("pageInfo").textContent = info;
+        document.getElementById("pageInfo2").textContent = info;
+        document.getElementById("pagerTop").hidden = false;
+        document.getElementById("pagerBottom").hidden = false;
+
+        const byType = {};
+        for (const r of pageRows) {
+            const t = r.courseType || "未分类";
+            if (!byType[t]) byType[t] = [];
+            byType[t].push(r);
+        }
+        const order = ["公共课", "专业课", "选修课", "未分类"];
+        const keys = [...new Set([...order.filter(k => byType[k]), ...Object.keys(byType)])];
+        let html = "";
+        for (const k of keys) {
+            const list = byType[k];
+            if (!list) continue;
+            html += `<div class="group-title"><span class="pill">${escapeHtml(k)}</span> · 本页 ${list.length} 条</div>`;
+            html += "<table><thead><tr><th>学生ID</th><th>课程ID</th><th>课程名称</th><th>课程类型</th><th>格式化输出</th></tr></thead><tbody>";
+            for (const r of list) {
+                const line = `学生ID：${r.studentId}，课程ID：${r.courseId}，课程名称：${r.courseName}`;
+                html += `<tr><td>${escapeHtml(r.studentId)}</td><td>${escapeHtml(r.courseId)}</td><td>${escapeHtml(r.courseName)}</td><td>${escapeHtml(r.courseType || "")}</td><td>${escapeHtml(line)}</td></tr>`;
+            }
+            html += "</tbody></table>";
+        }
+        tables.innerHTML = html;
+    }
+
+    function escapeHtml(s) {
+        return String(s)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll("\"", "&quot;");
+    }
+
+    function applyMasterAndView(records, processData) {
+        masterRecords = records || [];
+        viewRecords = [...masterRecords];
+        currentPage = 1;
+        if (processData) updateStatsFromProcess(processData);
+        renderPagedTable();
+    }
+
+    document.getElementById("btnImport").addEventListener("click", async () => {
+        setSearchMessage("", false);
+        setImportMessages("", "");
+        setLoading(true);
+        try {
+            const data = await postProcess(csvInput.value || "");
+            applyMasterAndView(data.records, data);
+            processMeta.textContent = `处理耗时：${data.elapsedMs} ms · ${data.message || ""}`;
+            if (data.warnings && data.warnings.length) {
+                processMeta.textContent += " | 告警：" + data.warnings.slice(0, 3).join("；");
+            }
+            setImportMessages("导入成功：输出 " + data.outputCount + " 条。", "");
+            showToast("导入成功", "success");
+        } catch (e) {
+            processMeta.textContent = "";
+            updateStatsFromProcess(null);
+            masterRecords = [];
+            viewRecords = [];
+            renderPagedTable();
+            setImportMessages("", "导入失败：" + (e.message || e));
+            showToast("导入失败", "error");
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    document.getElementById("btnSample").addEventListener("click", async () => {
+        setSearchMessage("", false);
+        setImportMessages("", "");
+        setLoading(true);
+        try {
+            const remote = await getSample();
+            csvInput.value = LOCAL_SAMPLE;
+            applyMasterAndView(remote, null);
+            statsBar.hidden = true;
+            processMeta.textContent = "已加载后端样例到表格（未走本次 CSV 统计）。可点击「导入并处理」查看统计。";
+            showToast("样例已加载", "success");
+        } catch {
+            csvInput.value = LOCAL_SAMPLE;
+            applyMasterAndView([], null);
+            processMeta.textContent = "后端不可用。";
+            showToast("加载失败", "error");
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    async function loadTestData(size) {
+        setImportMessages("", "");
+        setLoading(true);
+        try {
+            const text = await fetchMockCsv(size);
+            csvInput.value = text;
+            const data = await postProcess(text);
+            applyMasterAndView(data.records, data);
+            processMeta.textContent = `已加载测试数据(${size}) 并处理 | 处理耗时：${data.elapsedMs} ms`;
+            setImportMessages("测试数据导入成功。", "");
+            showToast("测试数据就绪", "success");
+        } catch (e) {
+            setImportMessages("", e.message || String(e));
+            showToast("测试数据失败", "error");
+        } finally {
+            setLoading(false);
+        }
+    }
+    document.getElementById("btnLoad100").addEventListener("click", () => loadTestData(100));
+    document.getElementById("btnLoad500").addEventListener("click", () => loadTestData(500));
+    document.getElementById("btnLoad1000").addEventListener("click", () => loadTestData(1000));
+
+    document.getElementById("btnClearInput").addEventListener("click", () => { csvInput.value = ""; });
+
+    document.getElementById("btnClearAll").addEventListener("click", () => {
+        masterRecords = [];
+        viewRecords = [];
+        currentPage = 1;
+        processMeta.textContent = "";
+        setImportMessages("", "");
+        setSearchMessage("", false);
+        statsBar.hidden = true;
+        renderPagedTable();
+        showToast("已清空数据", "success");
+    });
+
+    document.getElementById("btnExport").addEventListener("click", async () => {
+        if (!viewRecords.length) {
+            showToast("当前无数据可导出", "error");
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await fetch("/api/enrollment/export", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ records: viewRecords })
+            });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error(j.message || "导出失败");
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "enrollments.csv";
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast("已开始下载 CSV", "success");
+        } catch (e) {
+            showToast(e.message || "导出失败", "error");
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    document.getElementById("btnSearch").addEventListener("click", async () => {
+        const searchType = document.getElementById("searchType").value;
+        const keyword = document.getElementById("keyword").value.trim();
+        setSearchMessage("", false);
+        if (!masterRecords.length) {
+            setSearchMessage("请先导入或加载数据。", true);
+            return;
+        }
+        setLoading(true);
+        try {
+            const data = await postSearch(masterRecords, searchType, keyword);
+            if (!data.matched) {
+                setSearchMessage(data.message || "无匹配选课记录", true);
+                viewRecords = [];
+            } else {
+                viewRecords = data.records || [];
+            }
+            currentPage = 1;
+            renderPagedTable();
+        } catch (e) {
+            setSearchMessage(e.message || String(e), true);
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    document.getElementById("btnResetSearch").addEventListener("click", () => {
+        document.getElementById("keyword").value = "";
+        setSearchMessage("", false);
+        viewRecords = [...masterRecords];
+        currentPage = 1;
+        renderPagedTable();
+    });
+
+    document.getElementById("btnMultiSearch").addEventListener("click", async () => {
+        setSearchMessage("", false);
+        if (!masterRecords.length) {
+            setSearchMessage("请先导入或加载数据。", true);
+            return;
+        }
+        setLoading(true);
+        try {
+            const body = {
+                records: masterRecords,
+                studentId: document.getElementById("mStudentId").value.trim() || null,
+                courseId: document.getElementById("mCourseId").value.trim() || null,
+                courseName: document.getElementById("mCourseName").value.trim() || null,
+                courseType: document.getElementById("mCourseType").value || null
+            };
+            const data = await postSearchMulti(body);
+            if (!data.matched) {
+                setSearchMessage(data.message || "无匹配选课记录", true);
+                viewRecords = [];
+            } else {
+                viewRecords = data.records || [];
+            }
+            currentPage = 1;
+            renderPagedTable();
+        } catch (e) {
+            setSearchMessage(e.message || String(e), true);
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    document.getElementById("btnSort").addEventListener("click", async () => {
+        if (!viewRecords.length) {
+            showToast("当前列表为空", "error");
+            return;
+        }
+        setLoading(true);
+        try {
+            const sorted = await postSort(viewRecords, document.getElementById("sortField").value, document.getElementById("sortAsc").checked);
+            viewRecords = sorted;
+            masterRecords = [...sorted];
+            currentPage = 1;
+            renderPagedTable();
+            showToast("排序已应用", "success");
+        } catch (e) {
+            showToast(e.message || "排序失败", "error");
+        } finally {
+            setLoading(false);
+        }
+    });
+
+    function bindPager(prevId, nextId) {
+        document.getElementById(prevId).addEventListener("click", () => {
+            if (currentPage > 1) { currentPage--; renderPagedTable(); }
+        });
+        document.getElementById(nextId).addEventListener("click", () => {
+            if (currentPage < totalPages()) { currentPage++; renderPagedTable(); }
+        });
+    }
+    bindPager("btnPrev", "btnNext");
+    bindPager("btnPrev2", "btnNext2");
+
+    window.addEventListener("DOMContentLoaded", async () => {
+        csvInput.value = LOCAL_SAMPLE;
+        setLoading(true);
+        try {
+            const remote = await getSample();
+            masterRecords = remote;
+            viewRecords = [...remote];
+            processMeta.textContent = "页面已加载：表格为后端样例；文本框为示例 CSV。";
+        } catch {
+            masterRecords = [];
+            viewRecords = [];
+            processMeta.textContent = "无法连接后端样例接口，请点击「导入并处理」。";
+        } finally {
+            setLoading(false);
+            currentPage = 1;
+            renderPagedTable();
+        }
+    });
+</script>
+</body>
+</html>
